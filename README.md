@@ -1,5 +1,7 @@
 # 의원발의안 법제 초벌검토 시스템
 
+스트림리트 앱 시안 링크 https://bill-checker-vtwkx8kmjyxvax3fzctef3.streamlit.app/
+
 법령 입안·심사 기준(2026)에 근거한 AI 기반 의원발의안 사전 스크리닝 도구.
 
 ## 검토 항목
