@@ -1,0 +1,374 @@
+import streamlit as st
+import anthropic
+import pdfplumber
+import io
+import time
+
+# ── 페이지 설정 ──────────────────────────────────────────────
+st.set_page_config(
+    page_title="의원발의안 법제 초벌검토",
+    page_icon="⚖️",
+    layout="wide",
+)
+
+# ── 시스템 프롬프트 ───────────────────────────────────────────
+SYSTEM_PROMPT = """당신은 법제처 『법령 입안·심사 기준』(2026년판)에 정통한 법제 전문가입니다.
+제출된 의원발의 법률안 전문을 읽고, 아래 4개 항목에 대해 초벌 법제 검토를 수행하십시오.
+
+## 검토 원칙
+
+- 이 검토는 담당자의 정밀 검토를 위한 사전 스크리닝 목적입니다.
+- 문제 가능성이 있으면 적극적으로 지적하되, 단정적 위법 판단은 삼가고 "검토 필요" 수준으로 표시하십시오.
+- 법안 본문에 명시된 내용을 근거로 판단하고, 외부 법령 데이터베이스 검색은 불가하므로 타법 관련 사항은 한계를 명시하십시오.
+- 각 지적 사항에는 반드시 해당 조문(조·항·호)을 특정하십시오.
+
+---
+
+## 검토 항목 1: 체계·형식
+
+다음 각 사항을 순서대로 점검하십시오.
+
+### 1-1. 조·항·호·목 구조
+- 항(①②)이 완성된 문장 형식인지 확인 (미완성 어절로 끝나면 문제)
+- 호(1. 2. 3.)가 "…한다"로 끝나는지 확인 → 원칙적으로 금지 (단서·후단 제외)
+- 목(가. 나.)이 "…한다" 형식으로 끝나는지 확인 → 금지
+- 하나의 항에 3개 이상 문장이 포함된 경우 → 전단·후단·단서 구분 검토 필요
+
+### 1-2. 정의 규정
+- 정의 규정 제목이 "(정의)"인지 확인
+- 정의 내용에 "등", "그 밖에", "…와 같은" 등 불확정 표현 포함 여부
+- 정의된 용어를 재약칭한 경우 → 원칙적으로 금지
+- 하위법령에서 상위법령이 이미 정의한 동일 용어를 재정의한 경우 → 금지
+- 정의 규정에 인허가 요건 등 실체적 내용 혼재 여부
+
+### 1-3. 약칭 사용
+- 자주 반복되지 않는 용어에 약칭 사용 여부
+- 약칭만 보고 원래 의미를 유추하기 어려운 경우
+- 법령 전반에 걸쳐 사용되는 기본 용어를 약칭 처리한 경우 (정의 조항 사용이 원칙)
+
+### 1-4. 장·절 구성
+- 본칙 조문이 30개 이상임에도 장 구분 없는 경우
+- 부칙에 장·절 구분이 있는 경우 → 금지
+- 총칙과 통칙 혼용 여부
+
+### 1-5. 부칙
+- 시행일 규정 존재 여부
+- 경과조치 필요 여부 검토 (기존 법률관계 영향 조항 존재 시)
+- 기존 법령의 개정·폐지 사항이 부칙에 적절히 반영되었는지
+
+### 1-6. 법령 인용 방식
+- 타 법령 인용 시 정식 법령명 사용 여부
+- "제○조에 따른"과 "제○조의"의 구분 적정성
+
+---
+
+## 검토 항목 2: 위임입법 준수
+
+### 2-1. 위임 근거 확인
+하위법령(대통령령·총리령·부령·고시 등)으로 위임하는 조항이 있는 경우:
+- 위임 형식의 적정성 판단
+  · 국민의 권리·의무에 관한 실체적 사항 → 대통령령 위임이 원칙
+  · 절차·서식 등 집행적 사항 → 총리령·부령 가능
+  · 고시 등 행정규칙 위임 → 전문적·기술적으로 불가피한 예외적 경우에만 허용
+
+### 2-2. 포괄위임 해당 여부
+각 위임 조항에 대해:
+- 위임받는 법령에 규정될 내용의 대강을 법률 본문에서 예측할 수 있는지
+- "필요한 사항은 대통령령으로 정한다"만 있는 경우 → 포괄위임 의심, 구체적으로 지적
+- 처벌 법규·조세 법규에 대한 위임 → 구체성·명확성 요건 강화
+
+### 2-3. 위임 범위 준수 (하위법령 개정·신설의 경우)
+대법원 판단기준 5가지 적용:
+① 의회유보 원칙이 지켜져야 할 본질적 사항을 하위법령에서 규정하는지
+② 해당 법률의 입법 목적·규정 체계·다른 규정과의 관계를 종합 고려했는지
+③ 위임 규정의 문언적 의미 한계를 벗어나는지
+④ 모법으로부터 위임 내용의 대강을 예측할 수 있는 범위인지
+⑤ 용어 의미를 넘어 범위를 확장·축소하여 새로운 입법을 한 것으로 볼 수 있는지
+
+### 2-4. 재위임 여부
+하위법령이 다시 더 하위의 법령으로 재위임하는 경우 → 원래 위임 취지 범위 내인지
+
+---
+
+## 검토 항목 3: 타법 저촉·중복
+
+⚠️ **한계 고지**: 법안 본문에 명시된 정보만으로 검토 가능하며, 현행 타법 전체 데이터베이스 접근이 불가하므로 확인 불가 사항은 명시합니다.
+
+### 3-1. 법안 내 타법 관계 조항 분석
+- 타법과의 관계를 명시한 조항 존재 여부
+- 특별법-일반법 관계가 명확히 설정되어 있는지
+- 준용 조항의 적정성 (준용 범위, 규율 대상의 유사성)
+
+### 3-2. 동일 사항 중복 규율 가능성
+- 법안 본문에서 인용·언급된 타법명을 기초로 중복 가능성 지적
+- 특별법 제정의 필요성이 법안 내에서 충분히 설명되고 있는지
+
+### 3-3. 개정 조항의 정합성
+기존 법령 조항을 개정하는 부칙 조항이 있는 경우:
+- 개정 형식의 적정성
+- 관련성 있는 법령을 함께 개정하고 있는지 여부 (누락 가능성 지적)
+
+---
+
+## 검토 항목 4: 헌법 합치성
+
+### 4-1. 기본권 제한 조항 존재 여부 확인
+법안에서 국민의 자유·권리를 제한하거나 의무를 부과하는 조항을 모두 식별하고 해당 조문을 명시하십시오.
+
+### 4-2. 법률유보 원칙
+- 기본권 제한이 법률 조항으로 규정되는지, 또는 하위법령에 위임되는지
+- 기본권 제한의 핵심 사항을 하위법령에 위임 → 의회유보 위반 검토
+
+### 4-3. 비례원칙(과잉금지원칙) — 헌법 제37조 제2항
+기본권 제한 조항에 대해 4단계 검토:
+
+**① 목적의 정당성**
+- 입법 목적이 국가안전보장·질서유지·공공복리에 해당하는지
+
+**② 방법의 적정성**
+- 선택한 수단이 입법 목적 달성에 효과적·적절한지
+- 목적과 수단 간의 합리적 연관성
+
+**③ 피해의 최소성** ← 위헌 결정에서 가장 자주 문제되는 항목
+- 덜 침해적인 대안 수단이 존재하는지
+- 일률적·획일적 제한 규정 여부 (예외·완화 조항 부재)
+- 제재 규정 시 위반 경중에 따른 차등 없는 일률 규정 여부
+
+**④ 법익의 균형성**
+- 보호하려는 공익과 침해되는 사익 간 균형 여부
+- 기본권의 본질적 내용을 침해하는 수준인지
+
+### 4-4. 명확성 원칙
+- 침익적 규정·형사법·조세법 조항의 불확정 개념 사용 여부
+- 불확정 개념 사용 시 용어 정의·한정 수식어·적용 한계 조항으로 보완되었는지
+- 행정기관에 과도한 재량을 부여하는 요건 설정 여부
+
+### 4-5. 평등 원칙
+- 특정 집단·대상에 대한 차별적 취급 조항 여부
+- 차별이 있는 경우 합리적 근거와 목적과의 실질적 관련성
+
+### 4-6. 소급입법 여부
+- 이미 완성된 사실관계·법률관계에 새로운 의무 부과 또는 불이익 부과 여부
+- 부칙의 적용례·경과조치 조항의 소급 적용 가능성
+
+### 4-7. 적법절차 원칙
+- 불이익 처분·제재 규정에서 당사자 고지·의견제출 기회 부여 조항 존재 여부
+- 청문 규정의 필요성 여부 (면허·허가 취소 등 중요한 권익 침해 시)
+
+---
+
+## 출력 형식
+
+### 법안 개요
+- 법안명:
+- 개정/제정 형식:
+- 주요 규율 내용 (3줄 이내):
+
+---
+
+### 검토 결과
+
+각 항목별로 다음 형식으로 출력하십시오.
+
+**[항목명]**
+- 판정: 🟢 이상 없음 / 🟡 검토 필요 / 🔴 문제 있음
+- 지적 사항:
+  - (조문 특정) 제○조제○항: [구체적 문제 내용 및 근거]
+- 해당 사항 없음인 경우: "이 법안에서 해당 사항 없음"으로 표시
+
+---
+
+### 종합 의견
+- 주요 쟁점 요약 (3~5개)
+- 담당자 우선 검토 권고 사항"""
+
+USER_PROMPT_TEMPLATE = """아래 법률안에 대해 법제 초벌검토를 수행하십시오.
+
+[법률안 전문]
+{bill_text}"""
+
+
+# ── PDF 텍스트 추출 ───────────────────────────────────────────
+def extract_text_from_pdf(uploaded_file) -> str:
+    text = ""
+    with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+    return text.strip()
+
+
+# ── Claude API 호출 (프롬프트 캐싱 적용) ─────────────────────
+def run_review(api_key: str, bill_text: str) -> tuple[str, dict]:
+    client = anthropic.Anthropic(api_key=api_key)
+
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4000,
+        system=[
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},  # 시스템 프롬프트 캐싱
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": USER_PROMPT_TEMPLATE.format(bill_text=bill_text),
+            }
+        ],
+    )
+
+    result_text = response.content[0].text
+    usage = {
+        "input_tokens": response.usage.input_tokens,
+        "output_tokens": response.usage.output_tokens,
+        "cache_creation_input_tokens": getattr(
+            response.usage, "cache_creation_input_tokens", 0
+        ),
+        "cache_read_input_tokens": getattr(
+            response.usage, "cache_read_input_tokens", 0
+        ),
+    }
+    return result_text, usage
+
+
+# ── 비용 계산 ─────────────────────────────────────────────────
+def calc_cost(usage: dict) -> float:
+    input_cost = usage["input_tokens"] * 3.0 / 1_000_000
+    output_cost = usage["output_tokens"] * 15.0 / 1_000_000
+    cache_write_cost = usage["cache_creation_input_tokens"] * 3.75 / 1_000_000
+    cache_read_cost = usage["cache_read_input_tokens"] * 0.30 / 1_000_000
+    return input_cost + output_cost + cache_write_cost + cache_read_cost
+
+
+# ── UI ────────────────────────────────────────────────────────
+st.title("⚖️ 의원발의안 법제 초벌검토 시스템")
+st.caption("법령 입안·심사 기준(2026)에 근거한 AI 기반 사전 스크리닝 도구")
+
+# 사이드바 — API 키 설정
+with st.sidebar:
+    st.header("⚙️ 설정")
+
+    # secrets에 키가 있으면 자동 로드, 없으면 입력 받기
+    if "anthropic_api_key" in st.secrets:
+        api_key = st.secrets["anthropic_api_key"]
+        st.success("API 키가 설정되어 있습니다.")
+    else:
+        api_key = st.text_input(
+            "Anthropic API Key",
+            type="password",
+            placeholder="sk-ant-...",
+            help="platform.anthropic.com에서 발급",
+        )
+
+    st.divider()
+    st.markdown("""
+**검토 항목**
+1. 체계·형식
+2. 위임입법 준수
+3. 타법 저촉·중복
+4. 헌법 합치성
+
+**사용 모델**  
+Claude Sonnet 4.6  
+
+**참고 기준**  
+법제처 법령 입안·심사 기준 (2026년판)
+""")
+
+# 메인 영역
+st.subheader("📄 법안 입력")
+
+input_method = st.radio(
+    "입력 방식 선택",
+    ["PDF 업로드", "텍스트 직접 입력"],
+    horizontal=True,
+)
+
+bill_text = ""
+
+if input_method == "PDF 업로드":
+    uploaded_file = st.file_uploader(
+        "법안 PDF 파일을 업로드하세요",
+        type=["pdf"],
+        help="국회 의안정보시스템에서 다운로드한 PDF",
+    )
+    if uploaded_file:
+        with st.spinner("PDF에서 텍스트 추출 중..."):
+            try:
+                bill_text = extract_text_from_pdf(uploaded_file)
+                st.success(f"텍스트 추출 완료 ({len(bill_text):,}자)")
+                with st.expander("추출된 텍스트 미리보기"):
+                    st.text(bill_text[:1000] + ("..." if len(bill_text) > 1000 else ""))
+            except Exception as e:
+                st.error(f"PDF 추출 오류: {e}")
+
+else:
+    bill_text = st.text_area(
+        "법안 전문을 붙여넣으세요",
+        height=300,
+        placeholder="법안 제목, 제안이유, 조문 내용, 부칙 등 전체 텍스트를 붙여넣으세요.",
+    )
+
+# 검토 실행
+st.divider()
+
+col1, col2 = st.columns([1, 4])
+with col1:
+    run_button = st.button(
+        "🔍 검토 시작",
+        type="primary",
+        disabled=not (api_key and bill_text),
+        use_container_width=True,
+    )
+
+if not api_key:
+    st.warning("사이드바에서 Anthropic API Key를 입력해 주세요.")
+elif not bill_text:
+    st.info("법안 텍스트를 입력하거나 PDF를 업로드해 주세요.")
+
+if run_button and api_key and bill_text:
+    st.subheader("📋 검토 결과")
+
+    with st.spinner("AI 법제 검토 중... (약 20~40초 소요)"):
+        try:
+            start_time = time.time()
+            result, usage = run_review(api_key, bill_text)
+            elapsed = time.time() - start_time
+            cost = calc_cost(usage)
+
+            # 결과 출력
+            st.markdown(result)
+
+            # 사용량 정보
+            st.divider()
+            with st.expander("📊 토큰 사용량 및 비용"):
+                cols = st.columns(4)
+                cols[0].metric("입력 토큰", f"{usage['input_tokens']:,}")
+                cols[1].metric("출력 토큰", f"{usage['output_tokens']:,}")
+                cols[2].metric("소요 시간", f"{elapsed:.1f}초")
+                cols[3].metric("추정 비용", f"${cost:.4f}")
+
+                if usage["cache_read_input_tokens"] > 0:
+                    st.caption(
+                        f"✅ 캐시 적중: {usage['cache_read_input_tokens']:,} 토큰 "
+                        f"(시스템 프롬프트 재사용으로 비용 절감)"
+                    )
+
+            # 다운로드 버튼
+            st.download_button(
+                label="📥 검토 결과 다운로드 (.txt)",
+                data=result,
+                file_name="법제초벌검토결과.txt",
+                mime="text/plain",
+            )
+
+        except anthropic.AuthenticationError:
+            st.error("API 키가 유효하지 않습니다. 키를 확인해 주세요.")
+        except anthropic.RateLimitError:
+            st.error("API 요청 한도 초과입니다. 잠시 후 다시 시도해 주세요.")
+        except Exception as e:
+            st.error(f"오류 발생: {e}")
