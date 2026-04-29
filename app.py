@@ -225,7 +225,7 @@ def run_review(api_key: str, bill_text: str) -> tuple[str, dict]:
 
     response = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=5000,
+        max_tokens=8000,
         system=[
             {
                 "type": "text",
