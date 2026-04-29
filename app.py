@@ -306,9 +306,6 @@ Claude Sonnet 4.6
 # 메인 영역
 st.subheader("📄 법안 입력")
 
-# 메인 영역
-st.subheader("📄 법안 입력")
-
 st.markdown("""
 <style>
 [data-testid="stFileUploader"] {
@@ -333,7 +330,7 @@ if input_method == "PDF 업로드":
         type=["pdf"],
         help="국회 의안정보시스템에서 다운로드한 PDF",
     )
-if uploaded_file:
+    if uploaded_file:
         with st.spinner("PDF에서 텍스트 추출 중..."):
             try:
                 bill_text = extract_text_from_pdf(uploaded_file)
