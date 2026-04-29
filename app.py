@@ -310,7 +310,7 @@ st.markdown("""
 <style>
 [data-testid="stFileUploader"] {
     width: fit-content;
-    min-width: 400px;
+    min-width: 300px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -329,7 +329,7 @@ if input_method == "PDF 업로드":
         type=["pdf"],
         help="국회 의안정보시스템에서 다운로드한 PDF",
     )
-    
+st.caption("PDF 업로드 또는 텍스트 입력 후 리뷰 시작 버튼을 눌러주세요.")
     if uploaded_file:
         with st.spinner("PDF에서 텍스트 추출 중..."):
             try:
@@ -347,7 +347,7 @@ else:
         placeholder="법안 제목, 제안이유, 조문 내용, 부칙 등 전체 텍스트를 붙여넣으세요.",
     )
 
-# 검토 실행
+# 리뷰 실행
 st.divider()
 
 col1, col2 = st.columns([1, 4])
@@ -361,8 +361,6 @@ with col1:
 
 if not api_key:
     st.warning("사이드바에서 Anthropic API Key를 입력해 주세요.")
-elif not bill_text:
-    st.info("법안 텍스트를 입력하거나 PDF를 업로드해 주세요.")
 
 if run_button and api_key and bill_text:
     st.subheader("📋 리뷰 결과")
