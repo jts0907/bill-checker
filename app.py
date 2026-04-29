@@ -269,7 +269,7 @@ def calc_cost(usage: dict) -> float:
 
 # ── UI ────────────────────────────────────────────────────────
 st.title("⚖️ 국회 의안(법률안) 주요쟁점 리뷰 시스템")
-st.caption("법령 입안·심사 기준(2026)에 근거한 AI 기반 사전 스크리닝 도구")
+st.caption("법령 입안·심사 기준(2026)에 근거한 AI 기반 법률안 주요쟁점 사전 리뷰(스크리닝) 도구")
 
 # 사이드바 — API 키 설정
 with st.sidebar:
@@ -289,10 +289,11 @@ with st.sidebar:
 
     st.divider()
     st.markdown("""
-**검토 항목**
+**리뷰 항목**
 1. 체계·형식
 2. 위임입법 관련
 3. 타법 저촉·중복 우려
+3_1. 의원입법 주요 모니터링 사항
 4. 헌법 측면
 
 **사용 모델**  
@@ -354,9 +355,9 @@ elif not bill_text:
     st.info("법안 텍스트를 입력하거나 PDF를 업로드해 주세요.")
 
 if run_button and api_key and bill_text:
-    st.subheader("📋 검토 결과")
+    st.subheader("📋 리뷰 결과")
 
-    with st.spinner("AI 법제 검토 중... (약 20~40초 소요)"):
+    with st.spinner("AI가 리뷰 중... (약 20~40초 소요)"):
         try:
             start_time = time.time()
             result, usage = run_review(api_key, bill_text)
