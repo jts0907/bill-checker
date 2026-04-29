@@ -333,19 +333,24 @@ if input_method == "PDF 업로드":
         type=["pdf"],
         help="국회 의안정보시스템에서 다운로드한 PDF",
     )
-    if uploaded_file:
+if uploaded_file:
         with st.spinner("PDF에서 텍스트 추출 중..."):
             try:
                 bill_text = extract_text_from_pdf(uploaded_file)
                 st.success(f"텍스트 추출 완료 ({len(bill_text):,}자)")
             except Exception as e:
                 st.error(f"PDF 추출 오류: {e}")
-
 else:
+    st.markdown("""
+<style>
+[data-testid="stTextArea"] textarea {
+    width: 600px;
+}
+</style>
+""", unsafe_allow_html=True)
     bill_text = st.text_area(
         "법안 전문을 붙여넣으세요",
         height=300,
-        width: fit-content;
         placeholder="제안이유, 조문 내용, 부칙 등 전체 텍스트를 붙여넣으세요.",
     )
 # 리뷰 실행
