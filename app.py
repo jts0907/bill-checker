@@ -306,11 +306,14 @@ Claude Sonnet 4.6
 # 메인 영역
 st.subheader("📄 법안 입력")
 
+# 메인 영역
+st.subheader("📄 법안 입력")
+
 st.markdown("""
 <style>
 [data-testid="stFileUploader"] {
     width: fit-content;
-    min-width: 300px;
+    min-width: 400px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -322,6 +325,7 @@ input_method = st.radio(
 )
 
 bill_text = ""
+uploaded_file = None
 
 if input_method == "PDF 업로드":
     uploaded_file = st.file_uploader(
@@ -329,15 +333,11 @@ if input_method == "PDF 업로드":
         type=["pdf"],
         help="국회 의안정보시스템에서 다운로드한 PDF",
     )
-st.caption("PDF 업로드 또는 텍스트 입력 후 리뷰 시작 버튼을 눌러주세요.")
-
-if uploaded_file:
+    if uploaded_file:
         with st.spinner("PDF에서 텍스트 추출 중..."):
             try:
                 bill_text = extract_text_from_pdf(uploaded_file)
                 st.success(f"텍스트 추출 완료 ({len(bill_text):,}자)")
-                with st.expander("추출된 텍스트 미리보기"):
-                    st.text(bill_text[:1000] + ("..." if len(bill_text) > 1000 else ""))
             except Exception as e:
                 st.error(f"PDF 추출 오류: {e}")
 
@@ -345,9 +345,9 @@ else:
     bill_text = st.text_area(
         "법안 전문을 붙여넣으세요",
         height=300,
-        placeholder="법안 제목, 제안이유, 조문 내용, 부칙 등 전체 텍스트를 붙여넣으세요.",
+        width: fit-content;
+        placeholder="제안이유, 조문 내용, 부칙 등 전체 텍스트를 붙여넣으세요.",
     )
-
 # 리뷰 실행
 st.divider()
 
