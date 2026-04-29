@@ -306,6 +306,15 @@ Claude Sonnet 4.6
 # 메인 영역
 st.subheader("📄 법안 입력")
 
+st.markdown("""
+<style>
+[data-testid="stFileUploader"] {
+    width: fit-content;
+    min-width: 400px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 input_method = st.radio(
     "입력 방식 선택",
     ["PDF 업로드", "텍스트 직접 입력"],
@@ -320,6 +329,7 @@ if input_method == "PDF 업로드":
         type=["pdf"],
         help="국회 의안정보시스템에서 다운로드한 PDF",
     )
+    
     if uploaded_file:
         with st.spinner("PDF에서 텍스트 추출 중..."):
             try:
