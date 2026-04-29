@@ -330,7 +330,8 @@ if input_method == "PDF 업로드":
         help="국회 의안정보시스템에서 다운로드한 PDF",
     )
 st.caption("PDF 업로드 또는 텍스트 입력 후 리뷰 시작 버튼을 눌러주세요.")
-    if uploaded_file:
+
+if uploaded_file:
         with st.spinner("PDF에서 텍스트 추출 중..."):
             try:
                 bill_text = extract_text_from_pdf(uploaded_file)
