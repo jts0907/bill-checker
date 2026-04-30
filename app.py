@@ -267,6 +267,10 @@ def calc_cost(usage: dict) -> float:
     return input_cost + output_cost + cache_write_cost + cache_read_cost
 
 
+# ── session_state 초기화 ──────────────────────────────────────
+if "review_history" not in st.session_state:
+    st.session_state.review_history = []
+
 # ── UI ────────────────────────────────────────────────────────
 st.title("⚖️ 국회 의안(법률안) 주요쟁점 리뷰 시스템")
 st.caption("법령 입안·심사 기준(2026)에 근거한 AI 기반 법률안 주요쟁점 사전 리뷰(스크리닝) 도구")
@@ -374,32 +378,22 @@ if run_button and api_key and bill_text:
             result, usage = run_review(api_key, bill_text)
             elapsed = time.time() - start_time
             cost = calc_cost(usage)
+            
+            # ── 결과 session_state에 저장 (최대 3건) ──────────
+            import re
+            title_match = re.search(r"법안명[:\s*]*(.+)", result)
+            bill_title = title_match.group(1).strip() if title_match else f"검토 {len(st.session_state.review_history)+1}건"
+            st.session_state.review_history.insert(0, {
+                "title": bill_title[:30],
+                "result": result,
+                "usage": usage,
+                "cost": cost,
+                "elapsed": elapsed,
+            })
+            if len(st.session_state.review_history) > 3:
+                st.session_state.review_history = st.session_state.review_history[:3]
 
-            # 결과 출력
-            st.markdown(result)
-
-            # 사용량 정보
-            st.divider()
-            with st.expander("📊 토큰 사용량 및 비용"):
-                cols = st.columns(4)
-                cols[0].metric("입력 토큰", f"{usage['input_tokens']:,}")
-                cols[1].metric("출력 토큰", f"{usage['output_tokens']:,}")
-                cols[2].metric("소요 시간", f"{elapsed:.1f}초")
-                cols[3].metric("추정 비용", f"${cost:.4f}")
-
-                if usage["cache_read_input_tokens"] > 0:
-                    st.caption(
-                        f"✅ 캐시 적중: {usage['cache_read_input_tokens']:,} 토큰 "
-                        f"(시스템 프롬프트 재사용으로 비용 절감)"
-                    )
-
-            # 다운로드 버튼
-            st.download_button(
-                label="📥 리뷰 결과 다운로드 (.txt)",
-                data=result,
-                file_name="주요리뷰결과.txt",
-                mime="text/plain",
-            )
+            
 
         except anthropic.AuthenticationError:
             st.error("API 키가 유효하지 않습니다. 키를 확인해 주세요.")
@@ -407,3 +401,25 @@ if run_button and api_key and bill_text:
             st.error("API 요청 한도 초과입니다. 잠시 후 다시 시도해 주세요.")
         except Exception as e:
             st.error(f"오류 발생: {e}")
+# ── 검토 결과 이력 표시 ───────────────────────────────────────
+if st.session_state.review_history:
+    st.subheader("📋 리뷰 결과")
+    tabs = st.tabs([f"{'🕐' if i==0 else '🕑' if i==1 else '🕒'} {r['title']}"
+                    for i, r in enumerate(st.session_state.review_history)])
+    for tab, record in zip(tabs, st.session_state.review_history):
+        with tab:
+            st.markdown(record["result"])
+            st.divider()
+            with st.expander("📊 토큰 사용량 및 비용"):
+                cols = st.columns(4)
+                cols[0].metric("입력 토큰", f"{record['usage']['input_tokens']:,}")
+                cols[1].metric("출력 토큰", f"{record['usage']['output_tokens']:,}")
+                cols[2].metric("소요 시간", f"{record['elapsed']:.1f}초")
+                cols[3].metric("추정 비용", f"${record['cost']:.4f}")
+            st.download_button(
+                label="📥 리뷰 결과 다운로드 (.txt)",
+                data=record["result"],
+                file_name=f"주요리뷰결과_{record['title']}.txt",
+                mime="text/plain",
+                key=f"download_{id(record)}",
+            )
